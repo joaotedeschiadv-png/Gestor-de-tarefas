@@ -37,6 +37,8 @@ const STATUS = {
   concluido:  { label: "Concluída",            dot: "#22c55e", color: "#14532d", bg: "#dcfce7" },
 };
 
+const ALERT_STATUSES = ["aberto", "andamento"]; // alertas só para estes status
+
 const DEMAND_TYPES = ["Judicial", "Administrativa", "Ambas"];
 const SERVICE_TYPES = [
   "Execução Fiscal", "Migração", "Transação/Parcelamento",
@@ -53,7 +55,26 @@ const fonts = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wgh
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 function formatDate(d) { if (!d) return "—"; const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; }
+
+function getAlertType(task) {
+  if (!task.prazo || !ALERT_STATUSES.includes(task.status)) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const due = new Date(task.prazo + "T00:00:00");
+  if (due < today) return "vencido";
+  if (due >= today && due < tomorrow) return "hoje";
+  return null;
+}
+
 function isOverdue(d) { if (!d) return false; return new Date(d + "T23:59:59") < new Date(); }
+function isDueToday(d) {
+  if (!d) return false;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const due = new Date(d + "T00:00:00");
+  return due >= today && due < tomorrow;
+}
+
 function nowStr() {
   const d = new Date();
   return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
@@ -114,6 +135,16 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .btn-primary:hover { background: var(--accent2); }
 .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 
+/* ALERT BELL BUTTON */
+.alert-btn { position: relative; background: transparent; border: 1px solid var(--border); border-radius: 7px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; transition: all .15s; }
+.alert-btn:hover { border-color: var(--accent); }
+.alert-btn.has-alerts { border-color: #ef4444; background: #fef2f2; animation: bell-shake 2s ease-in-out infinite; }
+@keyframes bell-shake {
+  0%,100%{transform:rotate(0)} 5%{transform:rotate(-8deg)} 10%{transform:rotate(8deg)}
+  15%{transform:rotate(-6deg)} 20%{transform:rotate(6deg)} 25%{transform:rotate(0)}
+}
+.alert-badge { position: absolute; top: -5px; right: -5px; background: #ef4444; color: #fff; font-size: 9px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid var(--white); }
+
 /* SUBBAR */
 .subbar { display: flex; align-items: center; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--white); flex-shrink: 0; flex-wrap: wrap; }
 .view-tab { background: transparent; border: none; color: var(--text3); padding: 5px 12px; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border-radius: 6px; transition: all .15s; }
@@ -148,17 +179,27 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .k-col-body { padding: 10px; display: flex; flex-direction: column; gap: 7px; min-height: 120px; }
 .k-empty { display: flex; align-items: center; justify-content: center; height: 70px; color: #cbd5e1; font-size: 11px; border: 1.5px dashed var(--border); border-radius: 8px; }
 
-/* CARD */
+/* CARD base */
 .card { background: var(--white); border: 1px solid var(--border); border-radius: 9px; padding: 12px; cursor: pointer; transition: all .15s; position: relative; overflow: hidden; }
 .card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
 .card.aberto::before { background: #94a3b8; }
 .card.andamento::before { background: #f59e0b; }
 .card.acompanhar::before { background: #8b5cf6; }
 .card.concluido::before { background: #22c55e; }
+
+/* CARD alert overrides — amarelo e vermelho sobrescrevem a borda lateral */
+.card.alert-today { background: #fffbeb; border-color: #fbbf24; box-shadow: 0 0 0 2px #fde68a; z-index: 1; }
+.card.alert-today::before { background: #f59e0b; }
+.card.alert-vencido { background: #fef2f2; border-color: #fca5a5; box-shadow: 0 0 0 2px #fecaca; z-index: 2; }
+.card.alert-vencido::before { background: #ef4444; }
+
 .card[draggable=true] { cursor: grab; }
 .card[draggable=true]:active { cursor: grabbing; }
-.card:hover { border-color: var(--border2); box-shadow: 0 2px 12px rgba(37,99,235,.09); transform: translateY(-1px); }
+.card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.card.alert-today:hover { box-shadow: 0 4px 16px rgba(245,158,11,.25); }
+.card.alert-vencido:hover { box-shadow: 0 4px 16px rgba(239,68,68,.25); }
 .card.dragging { opacity: .3; transform: scale(.97); }
+
 .card-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
 .card-cnpj { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; margin-bottom: 8px; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 9px; }
@@ -166,19 +207,25 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .tag-tipo { background: #f1f5f9; color: var(--text2); border: 1px solid var(--border); }
 .card-footer { display: flex; align-items: center; justify-content: space-between; }
 .card-date { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; }
-.card-date.overdue { color: #ef4444; }
+.card-date.today { color: #d97706; font-weight: 700; }
+.card-date.overdue { color: #dc2626; font-weight: 700; }
 .card-right { display: flex; align-items: center; gap: 6px; }
 .avatar { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border); }
 .sbadge { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
 .card-hints { font-size: 10px; color: var(--text3); margin-top: 7px; padding-top: 7px; border-top: 1px solid #f1f5f9; display: flex; align-items: center; gap: 6px; }
+.alert-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; }
+.alert-tag.today { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+.alert-tag.vencido { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 
 /* LIST */
 .list-wrap { display: flex; flex-direction: column; gap: 14px; }
 .list-head { display: flex; align-items: center; gap: 8px; padding: 5px 0; margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; }
 .list-head-name { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: .8px; text-transform: uppercase; }
 .list-head-count { font-size: 10px; color: #cbd5e1; font-family: 'DM Mono', monospace; margin-left: 4px; }
-.lcard { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--white); border: 1px solid var(--border); border-radius: 9px; margin-bottom: 5px; cursor: pointer; transition: all .15s; }
+.lcard { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--white); border: 1px solid var(--border); border-radius: 9px; margin-bottom: 5px; cursor: pointer; transition: all .15s; position: relative; }
 .lcard:hover { border-color: var(--border2); box-shadow: 0 2px 8px rgba(37,99,235,.07); }
+.lcard.alert-today { background: #fffbeb; border-color: #fbbf24; }
+.lcard.alert-vencido { background: #fef2f2; border-color: #fca5a5; }
 .lcard-stripe { width: 3px; height: 34px; border-radius: 2px; flex-shrink: 0; }
 .lcard-info { flex: 1; min-width: 0; }
 .lcard-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -191,6 +238,29 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 
 /* OVERLAY */
 .overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(3px); }
+
+/* ALERT MODAL */
+.alert-modal { background: var(--white); border-radius: 14px; width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(15,23,42,.22); border: 1px solid var(--border); }
+.alert-modal-header { padding: 20px 22px 16px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+.alert-modal-title { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.alert-close { background: transparent; border: 1px solid var(--border); color: var(--text3); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+.alert-close:hover { border-color: #94a3b8; color: var(--text); }
+.alert-modal-body { padding: 16px 22px 20px; display: flex; flex-direction: column; gap: 16px; }
+.alert-section-title { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.alert-section-title.vencido { color: #dc2626; }
+.alert-section-title.today { color: #d97706; }
+.alert-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: filter .15s; }
+.alert-item.vencido { background: #fef2f2; border: 1px solid #fecaca; }
+.alert-item.vencido:hover { filter: brightness(.97); }
+.alert-item.today { background: #fffbeb; border: 1px solid #fde68a; }
+.alert-item.today:hover { filter: brightness(.97); }
+.alert-item-left { flex: 1; min-width: 0; }
+.alert-item-empresa { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alert-item-meta { font-size: 11px; margin-top: 2px; font-family: 'DM Mono', monospace; }
+.alert-item-meta.vencido { color: #dc2626; }
+.alert-item-meta.today { color: #d97706; }
+.alert-item-resp { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.alert-empty-ok { text-align: center; padding: 24px; color: #22c55e; font-size: 13px; font-weight: 500; }
 
 /* DETAIL PANEL */
 .detail-panel { background: var(--white); border-radius: 14px; width: 100%; max-width: 620px; max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(15,23,42,.18); border: 1px solid var(--border); display: flex; flex-direction: column; }
@@ -248,6 +318,7 @@ export default function App() {
   const [view, setView] = useState("kanban");
   const [showForm, setShowForm] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -261,13 +332,21 @@ export default function App() {
   const [sync, setSync] = useState("ok");
   const [error, setError] = useState(null);
   const draggingId = useRef(null);
+  const alertShownRef = useRef(false);
 
   const loadTasks = useCallback(async () => {
     try {
       setSync("loading");
       const data = await db.getAll();
-      setTasks((data || []).map(t => ({ ...t, historico: Array.isArray(t.historico) ? t.historico : [] })));
+      const parsed = (data || []).map(t => ({ ...t, historico: Array.isArray(t.historico) ? t.historico : [] }));
+      setTasks(parsed);
       setSync("ok");
+      // Mostra alertas automaticamente na primeira carga se houver pendências
+      if (!alertShownRef.current) {
+        alertShownRef.current = true;
+        const hasAlerts = parsed.some(t => getAlertType(t) !== null);
+        if (hasAlerts) setShowAlerts(true);
+      }
     } catch { setSync("error"); }
     finally { setLoading(false); }
   }, []);
@@ -351,6 +430,17 @@ export default function App() {
 
   const detailTask = tasks.find(x => x.id === detailId);
 
+  // Calcula alertas
+  const vencidas = tasks.filter(t => getAlertType(t) === "vencido");
+  const vencendoHoje = tasks.filter(t => getAlertType(t) === "hoje");
+  const totalAlerts = vencidas.length + vencendoHoje.length;
+
+  const openDetailFromAlert = (id) => {
+    setDetailId(id);
+    setShowAlerts(false);
+    setShowDetail(true);
+  };
+
   return (
     <>
       <style>{fonts}{css}</style>
@@ -367,6 +457,15 @@ export default function App() {
               <span className="sync-dot" />
               {sync === "ok" ? "Sincronizado" : sync === "loading" ? "Atualizando..." : "Erro de conexão"}
             </div>
+            {/* BOTÃO DE ALERTAS */}
+            <button
+              className={`alert-btn${totalAlerts > 0 ? " has-alerts" : ""}`}
+              onClick={() => setShowAlerts(true)}
+              title="Ver alertas de prazo"
+            >
+              🔔
+              {totalAlerts > 0 && <span className="alert-badge">{totalAlerts}</span>}
+            </button>
             <button className="btn-primary" onClick={openNew} disabled={loading}>+ Nova Tarefa</button>
           </div>
         </div>
@@ -403,7 +502,6 @@ export default function App() {
         {/* MAIN */}
         <div className="main">
           <div className="content">
-            {/* Stats */}
             {!loading && (
               <div className="stats-row">
                 {Object.entries(STATUS).map(([k, v]) => (
@@ -416,21 +514,85 @@ export default function App() {
                   <span className="stat-num" style={{ color: "#64748b" }}>{tasks.length}</span>
                   <span className="stat-lbl">Total</span>
                 </div>
+                {vencidas.length > 0 && (
+                  <div className="stat-chip" style={{ background: "#fef2f2", border: "1px solid #fca5a5", cursor: "pointer" }} onClick={() => setShowAlerts(true)}>
+                    <span className="stat-num" style={{ color: "#dc2626" }}>{vencidas.length}</span>
+                    <span className="stat-lbl" style={{ color: "#dc2626" }}>Vencidas</span>
+                  </div>
+                )}
+                {vencendoHoje.length > 0 && (
+                  <div className="stat-chip" style={{ background: "#fffbeb", border: "1px solid #fbbf24", cursor: "pointer" }} onClick={() => setShowAlerts(true)}>
+                    <span className="stat-num" style={{ color: "#d97706" }}>{vencendoHoje.length}</span>
+                    <span className="stat-lbl" style={{ color: "#d97706" }}>Vencem hoje</span>
+                  </div>
+                )}
               </div>
             )}
 
             {loading ? (
               <div className="empty-state">Conectando ao banco de dados...</div>
             ) : view === "kanban" ? (
-              <KanbanView tasks={filtered} allTasks={tasks} onOpenDetail={(id) => { setDetailId(id); setShowDetail(true); }}
+              <KanbanView tasks={filtered} allTasks={tasks}
+                onOpenDetail={(id) => { setDetailId(id); setShowDetail(true); }}
                 updateStatus={updateStatus} draggingId={draggingId} />
             ) : (
-              <ListView tasks={filtered} onOpenDetail={(id) => { setDetailId(id); setShowDetail(true); }}
+              <ListView tasks={filtered}
+                onOpenDetail={(id) => { setDetailId(id); setShowDetail(true); }}
                 onEdit={openEdit} onDelete={deleteTask} />
             )}
           </div>
         </div>
       </div>
+
+      {/* MODAL DE ALERTAS */}
+      {showAlerts && (
+        <div className="overlay" onClick={e => e.target.className === "overlay" && setShowAlerts(false)}>
+          <div className="alert-modal">
+            <div className="alert-modal-header">
+              <div className="alert-modal-title">🔔 Alertas de Prazo</div>
+              <button className="alert-close" onClick={() => setShowAlerts(false)}>✕</button>
+            </div>
+            <div className="alert-modal-body">
+              {totalAlerts === 0 ? (
+                <div className="alert-empty-ok">✅ Nenhuma tarefa com prazo vencido ou vencendo hoje!</div>
+              ) : (
+                <>
+                  {vencidas.length > 0 && (
+                    <div>
+                      <div className="alert-section-title vencido">🚨 Prazo Vencido ({vencidas.length})</div>
+                      {vencidas.map(t => (
+                        <div key={t.id} className="alert-item vencido" onClick={() => openDetailFromAlert(t.id)}>
+                          <div className="alert-item-left">
+                            <div className="alert-item-empresa">{t.empresa}</div>
+                            <div className="alert-item-meta vencido">Venceu em {formatDate(t.prazo)} · {STATUS[t.status].label}</div>
+                            <div className="alert-item-resp">Responsável: {t.responsavel}</div>
+                          </div>
+                          <span style={{ fontSize: 11, color: "#dc2626", fontWeight: 600, whiteSpace: "nowrap" }}>Ver →</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {vencendoHoje.length > 0 && (
+                    <div>
+                      <div className="alert-section-title today">⚠️ Vence Hoje ({vencendoHoje.length})</div>
+                      {vencendoHoje.map(t => (
+                        <div key={t.id} className="alert-item today" onClick={() => openDetailFromAlert(t.id)}>
+                          <div className="alert-item-left">
+                            <div className="alert-item-empresa">{t.empresa}</div>
+                            <div className="alert-item-meta today">Prazo: {formatDate(t.prazo)} · {STATUS[t.status].label}</div>
+                            <div className="alert-item-resp">Responsável: {t.responsavel}</div>
+                          </div>
+                          <span style={{ fontSize: 11, color: "#d97706", fontWeight: 600, whiteSpace: "nowrap" }}>Ver →</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DETAIL PANEL */}
       {showDetail && detailTask && (
@@ -451,7 +613,11 @@ export default function App() {
                 </span>],
                 ["Responsável", detailTask.responsavel],
                 ["Criado por", detailTask.criador],
-                ["Prazo", <span style={{ color: isOverdue(detailTask.prazo) && detailTask.status !== "concluido" ? "#ef4444" : "inherit" }}>{formatDate(detailTask.prazo)}</span>],
+                ["Prazo", <span style={{ color: getAlertType(detailTask) === "vencido" ? "#dc2626" : getAlertType(detailTask) === "hoje" ? "#d97706" : "inherit", fontWeight: getAlertType(detailTask) ? 700 : 500 }}>
+                  {formatDate(detailTask.prazo)}
+                  {getAlertType(detailTask) === "vencido" && " 🚨"}
+                  {getAlertType(detailTask) === "hoje" && " ⚠️"}
+                </span>],
                 ["Demanda", detailTask.tipo],
                 ...(detailTask.servico ? [["Serviço", detailTask.servico]] : []),
               ].map(([label, val], i) => (
@@ -486,12 +652,9 @@ export default function App() {
                     ))}
                 </div>
                 <div className="hist-add-area">
-                  <textarea
-                    placeholder="Adicione uma observação sobre o andamento..."
-                    value={histText}
-                    onChange={e => setHistText(e.target.value)}
-                    style={{ width:"100%", background:"#fff", border:"1px solid #e2e8f0", borderRadius:7, padding:"9px 11px", fontFamily:"'DM Sans',sans-serif", fontSize:12, color:"#1e293b", outline:"none", resize:"vertical", minHeight:64 }}
-                  />
+                  <textarea placeholder="Adicione uma observação sobre o andamento..."
+                    value={histText} onChange={e => setHistText(e.target.value)}
+                    style={{ width:"100%", background:"#fff", border:"1px solid #e2e8f0", borderRadius:7, padding:"9px 11px", fontFamily:"'DM Sans',sans-serif", fontSize:12, color:"#1e293b", outline:"none", resize:"vertical", minHeight:64 }} />
                   <div className="hist-add-row">
                     <select value={histAutor} onChange={e => setHistAutor(e.target.value)}
                       style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:7, padding:"6px 10px", fontFamily:"'DM Sans',sans-serif", fontSize:12, color:"#1e293b", outline:"none" }}>
@@ -505,8 +668,7 @@ export default function App() {
             <div className="detail-actions">
               <button className="act-btn" onClick={() => openEdit(detailId)}>✏ Editar</button>
               <button className="act-btn del" onClick={() => deleteTask(detailId)}>Excluir</button>
-              <select className="status-sel" value={detailTask.status}
-                onChange={e => { updateStatus(detailId, e.target.value); }}>
+              <select className="status-sel" value={detailTask.status} onChange={e => updateStatus(detailId, e.target.value)}>
                 {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
@@ -563,24 +725,37 @@ export default function App() {
   );
 }
 
-function Avatar({ name }) {
-  return <div className="avatar" style={{ background: TEAM_COLORS[name] || "#64748b" }} title={name}>{TEAM_INITIALS(name)}</div>;
-}
-
 function TaskCard({ task, onOpenDetail, updateStatus, isDraggable, onDragStart, onDragEnd }) {
   const [dragging, setDragging] = useState(false);
   const st = STATUS[task.status];
   const sc = SVC_COLORS[task.servico];
-  const over = isOverdue(task.prazo) && task.status !== "concluido";
+  const alertType = getAlertType(task);
   const hc = (task.historico || []).length;
+
+  let dateClass = "card-date";
+  if (alertType === "vencido") dateClass += " overdue";
+  else if (alertType === "hoje") dateClass += " today";
+
+  let cardClass = `card ${task.status}`;
+  if (alertType === "vencido") cardClass += " alert-vencido";
+  else if (alertType === "hoje") cardClass += " alert-today";
+  if (dragging) cardClass += " dragging";
+
   return (
     <div
-      className={`card ${task.status}${dragging ? " dragging" : ""}`}
+      className={cardClass}
       draggable={isDraggable || false}
       onDragStart={e => { setDragging(true); onDragStart && onDragStart(e); }}
       onDragEnd={e => { setDragging(false); onDragEnd && onDragEnd(e); }}
       onClick={() => onOpenDetail(task.id)}
     >
+      {alertType && (
+        <div style={{ marginBottom: 8 }}>
+          <span className={`alert-tag ${alertType === "vencido" ? "vencido" : "today"}`}>
+            {alertType === "vencido" ? "🚨 Prazo Vencido" : "⚠️ Vence Hoje"}
+          </span>
+        </div>
+      )}
       <div className="card-title">{task.empresa}</div>
       {task.cnpj && <div className="card-cnpj">{task.cnpj}</div>}
       <div className="card-tags">
@@ -588,10 +763,12 @@ function TaskCard({ task, onOpenDetail, updateStatus, isDraggable, onDragStart, 
         <span className="tag tag-tipo">{task.tipo}</span>
       </div>
       <div className="card-footer">
-        <div className={`card-date${over ? " overdue" : ""}`}>{over ? "⚠" : "📅"} {formatDate(task.prazo)}</div>
+        <div className={dateClass}>📅 {formatDate(task.prazo)}</div>
         <div className="card-right">
           <span className="sbadge" style={{ background: st.bg, color: st.color, border: `1px solid ${st.dot}40` }}>{st.label}</span>
-          <Avatar name={task.responsavel} />
+          <div className="avatar" style={{ background: TEAM_COLORS[task.responsavel] || "#64748b" }} title={task.responsavel}>
+            {TEAM_INITIALS(task.responsavel)}
+          </div>
         </div>
       </div>
       {(task.descricao || hc > 0) && (
@@ -619,6 +796,11 @@ function KanbanView({ tasks, allTasks, onOpenDetail, updateStatus, draggingId })
     <div className="kanban">
       {Object.entries(STATUS).map(([key, st]) => {
         const colTasks = tasks.filter(t => t.status === key);
+        // Ordena: vencidos primeiro, depois vence hoje, depois normais
+        const sorted = [...colTasks].sort((a, b) => {
+          const order = { vencido: 0, hoje: 1, null: 2 };
+          return (order[getAlertType(a)] ?? 2) - (order[getAlertType(b)] ?? 2);
+        });
         return (
           <div key={key} className={`k-col${dragOver === key ? " drag-over" : ""}`}
             onDragOver={e => { e.preventDefault(); setDragOver(key); }}
@@ -632,9 +814,9 @@ function KanbanView({ tasks, allTasks, onOpenDetail, updateStatus, draggingId })
               <span className="k-count">{colTasks.length}</span>
             </div>
             <div className="k-col-body">
-              {colTasks.length === 0
+              {sorted.length === 0
                 ? <div className="k-empty">Arraste um card aqui</div>
-                : colTasks.map(t => (
+                : sorted.map(t => (
                   <TaskCard key={t.id} task={t} onOpenDetail={onOpenDetail} updateStatus={updateStatus}
                     isDraggable={true}
                     onDragStart={() => { draggingId.current = t.id; }}
@@ -660,19 +842,27 @@ function ListView({ tasks, onOpenDetail, onEdit, onDelete }) {
             <span className="list-head-name">{g.st.label}</span>
             <span className="list-head-count">{g.items.length}</span>
           </div>
-          {g.items.map(t => {
+          {[...g.items].sort((a, b) => {
+            const order = { vencido: 0, hoje: 1, null: 2 };
+            return (order[getAlertType(a)] ?? 2) - (order[getAlertType(b)] ?? 2);
+          }).map(t => {
             const sc = SVC_COLORS[t.servico];
-            const over = isOverdue(t.prazo) && t.status !== "concluido";
+            const alertType = getAlertType(t);
             return (
-              <div className="lcard" key={t.id} onClick={() => onOpenDetail(t.id)}>
-                <div className="lcard-stripe" style={{ background: g.st.dot }} />
+              <div key={t.id} className={`lcard${alertType === "vencido" ? " alert-vencido" : alertType === "hoje" ? " alert-today" : ""}`}
+                onClick={() => onOpenDetail(t.id)}>
+                <div className="lcard-stripe" style={{ background: alertType === "vencido" ? "#ef4444" : alertType === "hoje" ? "#f59e0b" : g.st.dot }} />
                 <div className="lcard-info">
                   <div className="lcard-title">{t.empresa}</div>
                   <div className="lcard-sub">{t.cnpj ? t.cnpj + " · " : ""}{t.tipo}{t.servico ? " · " + t.servico : ""}</div>
                 </div>
                 <div className="lcard-right">
+                  {alertType === "vencido" && <span className="alert-tag vencido">🚨 Vencido</span>}
+                  {alertType === "hoje" && <span className="alert-tag today">⚠️ Hoje</span>}
                   {t.servico && sc && <span className="tag" style={{ background: `${sc}18`, color: sc, border: `1px solid ${sc}30`, fontSize: 10, padding: "2px 8px", borderRadius: 4 }}>{t.servico}</span>}
-                  <span style={{ fontSize: 10, color: over ? "#ef4444" : "#94a3b8", fontFamily: "'DM Mono',monospace" }}>{over ? "⚠ " : ""}{formatDate(t.prazo)}</span>
+                  <span style={{ fontSize: 10, color: alertType === "vencido" ? "#dc2626" : alertType === "hoje" ? "#d97706" : "#94a3b8", fontFamily: "'DM Mono',monospace", fontWeight: alertType ? 700 : 400 }}>
+                    {formatDate(t.prazo)}
+                  </span>
                   <span className="sbadge" style={{ background: g.st.bg, color: g.st.color, border: `1px solid ${g.st.dot}40` }}>{g.st.label}</span>
                   <div className="avatar" style={{ background: TEAM_COLORS[t.responsavel] || "#64748b" }}>{TEAM_INITIALS(t.responsavel)}</div>
                   <button className="lact" onClick={e => { e.stopPropagation(); onEdit(t.id); }}>Editar</button>
